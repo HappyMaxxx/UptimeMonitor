@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://redis:6379/0"
     celery_result_backend: str = "redis://redis:6379/1"
     
+    database_url: str = "postgresql://user:password@db:5432/uptime_monitor"
+
     class Config:
         env_file = ".env"
 

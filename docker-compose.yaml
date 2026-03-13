@@ -29,4 +29,28 @@ services:
       - redis
     volumes:
       - .:/app
+  
+  db:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: uptime_monitor
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
       
+  migrations:
+    build: .
+    command: alembic upgrade head
+    depends_on:
+      - db
+    volumes:
+      - .:/app
+    environment:
+      DATABASE_URL: postgresql+psycopg2://user:password@db:5432/uptime_monito
+
+volumes:
+  postgres_data:

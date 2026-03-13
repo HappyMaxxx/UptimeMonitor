@@ -1,36 +1,24 @@
-# Temporary db
-from typing import Dict
+from sqlalchemy import create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from app.config import get_settings
 
-from app.schemas.targets import Target
+settings = get_settings()
 
+engine = create_engine(
+    settings.database_url,
+    pool_size=10,
+    max_overflow=20,
+    pool_pre_ping=True,
+)
 
-class IdCounter():
-    def __init__(self, start: int = 1):
-        self._id: int = start
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-    def get_next(self) -> int:
-        # Returns IdCouner._id and increase it
-        temp = self._id
-        self._id += 1
-        return temp
+Base = declarative_base()
 
-    def clear(self) -> None:
-        # Reset counter
-        self._id = 1
-        return None
-
-class InMemoryDB:
-    def __init__(self):
-        self.targets: Dict[int, Target] = {}
-        self.counter = IdCounter()
-    
-    def add_target(self, target: Target) -> Target:
-        target.id = self.counter.get_next()
-        self.targets[target.id] = target
-        return target
-    
-    def get_target(self, target_id: int) -> Target:
-        return self.targets.get(target_id)
-
-
-db = InMemoryDB()
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
