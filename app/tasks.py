@@ -16,7 +16,6 @@ def dispatcher_task():
     targets_to_check = [target for target in db_session.query(TargetModel).all() if target.status in ['PENDING', 'UP', 'DOWN']]
     
     for target in targets_to_check:
-        logger.info(f"Checking target {target.id} - {target.url} - Last checked at {target.updated_at} - Status: {target.status}")
         if target.updated_at + timedelta(minutes=target.check_interval) <= now:
             ping.delay(target.id)
 
