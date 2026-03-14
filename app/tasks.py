@@ -1,11 +1,14 @@
+import time
 import httpx
-
+from fastapi import Depends
 from datetime import datetime, timezone, timedelta
 from celery.utils.log import get_task_logger
+from sqlalchemy.orm import Session
 
 from app.celery_app import celery_app
-from app.database import get_db
+from app.database import get_db, SessionLocal
 from app.models.targets import Target as TargetModel
+from app.models.targets import TargetHistory
 
 logger = get_task_logger(__name__)
 
@@ -19,21 +22,37 @@ def dispatcher_task():
         if target.updated_at + timedelta(minutes=target.check_interval) <= now:
             ping.delay(target.id)
 
-@celery_app.task
+@celery_app.task(name="ping")
 def ping(target_id: int):
-    db_session = next(get_db())
-    target = db_session.query(TargetModel).filter(TargetModel.id == target_id).first()
-    if not target:
-        return
-
+    db = SessionLocal()
     try:
-        response = httpx.get(target.url, timeout=10)
-        target.status = 'UP' if response.status_code == 200 else 'DOWN'
-    except Exception as e:
-        target.status = 'DOWN'
-    finally:
-        target.updated_at = datetime.now()
-        db_session.commit()
-        db_session.refresh(target)
+        target = db.query(TargetModel).filter(TargetModel.id == target_id).first()
+        if not target:
+            return f"Target {target_id} not found"
 
-    return target.status
+        start_time = time.time()
+        try:
+            response = httpx.get(target.url, timeout=10.0)
+            duration = time.time() - start_time
+            status = "UP" if response.status_code == 200 else "DOWN"
+            code = response.status_code
+        except Exception as e:
+            duration = time.time() - start_time
+            status = "DOWN"
+            code = None
+
+        target.status = status
+        
+        history = TargetHistory(
+            target_id=target.id,
+            status=status
+        )
+        db.add(history)
+        db.commit()
+        return f"Finished checking {target.url}: {status}"
+
+    except Exception as e:
+        db.rollback()
+        raise e
+    finally:
+        db.close()
