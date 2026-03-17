@@ -6,21 +6,36 @@ from fastapi import APIRouter, HTTPException, Depends
 from app.schemas.targets import Target, TargetCreate, TargetResponse
 from app.database import get_db
 from app.models.targets import Target as TargetModel, TargetHistory
+from app.models.users import User
+from app.dependencies import get_current_user
 from app.tasks import ping
 
 router = APIRouter()
 
 @router.get('/targets', tags=['Targets'], response_model=List[TargetResponse])
-def get_targets(db: Session = Depends(get_db)):
-    targets = db.query(TargetModel).all()
+def get_targets(db: Session = Depends(get_db),
+                current_user: User = Depends(get_current_user)
+                ):
+    
+    targets = db.query(TargetModel).filter(TargetModel.owner_id == current_user.id).all()
     if not targets:
-        raise HTTPException(status_code=404, detail="No targets found")
+        return []
     return targets
 
 @router.get('/targets/{id}/history', tags=['Targets'])
-def get_target_history(id: int, db: Session = Depends(get_db),
-                       limit: int = 10):
+def get_target_history(id: int,
+                       db: Session = Depends(get_db),
+                       limit: int = 10,
+                       current_user: User = Depends(get_current_user)):
     
+    target_exists = db.query(TargetModel).filter(
+        TargetModel.id == id,
+        TargetModel.owner_id == current_user.id
+    ).first()
+
+    if not target_exists:
+        raise HTTPException(status_code=404, detail="Target not found or access denied")
+
     query = (
         select(TargetHistory)
         .where(TargetHistory.target_id == id)
@@ -29,34 +44,42 @@ def get_target_history(id: int, db: Session = Depends(get_db),
     )
 
     res = db.execute(query)
+    history_records = res.scalars().all()
 
-    if not res:
-        raise HTTPException(status_code=404, detail="No target's history found")
+    if not history_records:
+        return []
 
-    return res.scalars().all()
+    return history_records
 
-@router.post('/targets', tags=['Targets'], status_code=201, response_model=Target)
-def create_target(target: TargetCreate, db: Session = Depends(get_db)):
+@router.post('/targets', tags=['Targets'], status_code=201, response_model=TargetResponse)
+def create_target(target: TargetCreate,
+                  db: Session = Depends(get_db),
+                  current_user: User = Depends(get_current_user)):
+    
     target_data = target.model_dump(mode="json")
     
-    new_target = TargetModel(**target_data)
+    new_target = TargetModel(**target_data, owner_id=current_user.id)
 
-    history = TargetHistory(status=new_target.status)
-    new_target.history.append(history)
-    
     db.add(new_target)
     db.commit()
     db.refresh(new_target)
-
+    
     ping.delay(new_target.id)
-
     return new_target
 
 @router.delete('/targets/{id}', tags=['Targets'])
-def delete_target(id: int, db: Session = Depends(get_db)):
-    target = db.query(TargetModel).filter(TargetModel.id == id).first()
+def delete_target(id: int,db: Session = Depends(get_db),
+                  current_user: User = Depends(get_current_user)
+                  ):
+    
+    target = db.query(TargetModel).filter(
+        TargetModel.id == id, 
+        TargetModel.owner_id == current_user.id
+    ).first()
+    
     if not target:
-        raise HTTPException(status_code=404, detail="Target not found")
+        raise HTTPException(status_code=404, detail="Target not found or access denied")
+        
     db.delete(target)
     db.commit()
-    return None
+    return {"message": "Deleted successfully"}

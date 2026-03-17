@@ -9,6 +9,7 @@ from app.celery_app import celery_app
 from app.database import get_db, SessionLocal
 from app.models.targets import Target as TargetModel
 from app.models.targets import TargetHistory
+from app.models.users import User
 
 logger = get_task_logger(__name__)
 
