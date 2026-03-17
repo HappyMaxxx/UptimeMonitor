@@ -18,9 +18,9 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
     repo = UserRepository(db)
     
     if repo.get_by_username(user_data.username):
-        raise HTTPException(status_code=400, detail="Username вже зайнятий")
+        raise HTTPException(status_code=400, detail="Username is already taken")
     if repo.get_by_email(user_data.email):
-        raise HTTPException(status_code=400, detail="Email вже зареєстровано")
+        raise HTTPException(status_code=400, detail="Email is already registered")
     
     user = repo.create(user_data)
     return user
@@ -33,12 +33,12 @@ def login(credentials: LoginRequest, db: Session = Depends(get_db)):
     if not user or not verify_password(credentials.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Невірний username або пароль",
+            detail="Invalid username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
     if not user.is_active:
-        raise HTTPException(status_code=400, detail="Акаунт деактивовано")
+        raise HTTPException(status_code=400, detail="Account unactive")
     
     access_token = create_access_token({"sub": str(user.id)})
     refresh_token = create_refresh_token({"sub": str(user.id)})
@@ -53,14 +53,14 @@ def refresh_token(
     payload = decode_token(credentials.credentials)
     
     if not payload or payload.get("type") != "refresh":
-        raise HTTPException(status_code=401, detail="Невалідний refresh токен")
+        raise HTTPException(status_code=401, detail="Not a valid refresh token")
     
     user_id = int(payload.get("sub"))
     repo = UserRepository(db)
     user = repo.get_by_id(user_id)
     
     if not user or not user.is_active:
-        raise HTTPException(status_code=401, detail="Користувача не знайдено")
+        raise HTTPException(status_code=401, detail="User not found or inactive")
     
     new_access = create_access_token({"sub": str(user.id)})
     new_refresh = create_refresh_token({"sub": str(user.id)})

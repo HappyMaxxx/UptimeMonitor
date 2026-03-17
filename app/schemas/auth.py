@@ -11,7 +11,7 @@ class UserCreate(BaseModel):
     @field_validator("email")
     def validate_email(cls, v):
         if "@" not in v or "." not in v.split("@")[1]:
-            raise ValueError("Невалідний email")
+            raise ValueError("Not a valid email")
         return v.lower()
 
 
